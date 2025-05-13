@@ -1,0 +1,1521 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TropiTunes Karaoke Queue</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        tropi: {
+                            pink: '#FF69B4',
+                            hotpink: '#FF1493',
+                            lightpink: '#FFB6C1',
+                            white: '#FFFFFF',
+                            offwhite: '#F8F8F8',
+                            black: '#000000',
+                            darkgray: '#333333',
+                            success: '#4CAF50',
+                            warning: '#FFC107',
+                            danger: '#F44336'
+                        }
+                    },
+                    animation: {
+                        'float': 'float 6s ease-in-out infinite',
+                        'pulse-slow': 'pulse 4s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+                        'spin-slow': 'spin 25s linear infinite',
+                    },
+                    keyframes: {
+                        float: {
+                            '0%, 100%': { transform: 'translateY(0)' },
+                            '50%': { transform: 'translateY(-20px)' },
+                        }
+                    },
+                }
+            }
+        }
+    </script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=Montserrat:wght@300;400;700&display=swap');
+
+        :root {
+            --glow-color: rgba(255, 105, 180, 0.7);
+        }
+
+        /* Pink, white and black theme */
+        body {
+            background-color: #000000;
+            font-family: 'Montserrat', sans-serif;
+            overflow-x: hidden;
+            color: #FFFFFF;
+        }
+
+        h1, h2, h3, h4 {
+            font-family: 'Playfair Display', serif;
+        }
+
+        .glow-text {
+            text-shadow: 0 0 10px var(--glow-color),
+                         0 0 20px var(--glow-color);
+        }
+
+        /* Film grain effect */
+        .film-grain {
+            position: fixed;
+            top: 0;
+            left: 0;
+            height: 100%;
+            width: 100%;
+            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
+            opacity: 0.08;
+            pointer-events: none;
+            z-index: 1000;
+        }
+
+        /* Panel styling */
+        .tropi-panel {
+            background-color: rgba(0, 0, 0, 0.7);
+            border: 1px solid rgba(255, 105, 180, 0.3);
+            box-shadow: 0 0 20px rgba(255, 105, 180, 0.3);
+            backdrop-filter: blur(10px);
+        }
+
+        .dark .tropi-panel {
+            background-color: rgba(0, 0, 0, 0.8);
+            border: 1px solid rgba(255, 105, 180, 0.4);
+        }
+
+        .sparkle {
+            position: absolute;
+            background-color: white;
+            border-radius: 50%;
+            opacity: 0;
+            pointer-events: none;
+            z-index: 10;
+        }
+
+        .queue-entry:nth-child(odd) {
+            background-color: rgba(255, 105, 180, 0.1);
+        }
+
+        .queue-entry:nth-child(even) {
+            background-color: rgba(0, 0, 0, 0.7);
+        }
+
+        /* Gradient border */
+        .gradient-border {
+            position: relative;
+            border-radius: 0.5rem;
+        }
+
+        .gradient-border::before {
+            content: "";
+            position: absolute;
+            top: -2px;
+            left: -2px;
+            right: -2px;
+            bottom: -2px;
+            background: linear-gradient(45deg, #FF69B4, #FF1493, #FFFFFF, #FF69B4);
+            background-size: 400% 400%;
+            border-radius: inherit;
+            z-index: -1;
+            animation: gradient-animation 15s ease infinite;
+        }
+
+        @keyframes gradient-animation {
+            0% {
+                background-position: 0% 50%;
+            }
+            50% {
+                background-position: 100% 50%;
+            }
+            100% {
+                background-position: 0% 50%;
+            }
+        }
+
+        /* Vinyl record styling */
+        .vinyl-record {
+            width: 220px;
+            height: 220px;
+            border-radius: 50%;
+            background: radial-gradient(circle, #000000 30%, #222 31%, #222 35%, #333 36%, #333 40%, #222 41%, #222 60%, #111 61%);
+            box-shadow: 0 0 30px rgba(255, 105, 180, 0.4);
+            position: relative;
+            overflow: hidden;
+            cursor: pointer;
+        }
+
+        .vinyl-record::before {
+            content: "";
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(135deg, rgba(255, 255, 255, 0.1) 0%, transparent 50%, rgba(255, 255, 255, 0.05) 100%);
+            border-radius: 50%;
+        }
+
+        .vinyl-label {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            background: #FF69B4;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #FFFFFF;
+            font-size: 12px;
+            font-weight: bold;
+        }
+
+        /* Pink grid pattern */
+        .pink-grid {
+            background-image: linear-gradient(to right, rgba(255, 105, 180, 0.2) 1px, transparent 1px),
+                              linear-gradient(to bottom, rgba(255, 105, 180, 0.2) 1px, transparent 1px);
+            background-size: 40px 40px;
+        }
+
+        /* Queue item styling for employee view */
+        .queue-item {
+            border-left: 4px solid transparent;
+            transition: all 0.3s ease;
+        }
+
+        .queue-item:hover {
+            background-color: rgba(255, 105, 180, 0.15);
+        }
+
+        .queue-item.active {
+            border-left-color: #FF1493;
+            background-color: rgba(255, 105, 180, 0.1);
+        }
+
+        .queue-item.late {
+            border-left-color: #F44336;
+        }
+
+        .queue-item.completed {
+            opacity: 0.6;
+            border-left-color: #4CAF50;
+        }
+
+        /* Status indicators */
+        .status-indicator {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 8px;
+        }
+
+        .status-active {
+            background-color: #FF1493;
+            box-shadow: 0 0 8px #FF1493;
+        }
+
+        .status-waiting {
+            background-color: #FFFFFF;
+        }
+
+        .status-late {
+            background-color: #F44336;
+            box-shadow: 0 0 8px #F44336;
+        }
+
+        .status-completed {
+            background-color: #4CAF50;
+        }
+
+        /* Toast notification */
+        .toast-notification {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            padding: 16px 24px;
+            background-color: rgba(0, 0, 0, 0.9);
+            border-left: 4px solid #FF1493;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+            border-radius: 4px;
+            z-index: 1000;
+            transform: translateY(100px);
+            opacity: 0;
+            transition: all 0.3s ease;
+        }
+
+        .toast-notification.show {
+            transform: translateY(0);
+            opacity: 1;
+        }
+
+        /* Return to customer view button */
+        .back-to-customer-view {
+            position: fixed;
+            bottom: 20px;
+            left: 20px;
+            z-index: 50;
+        }
+        
+        /* Loading overlay */
+        .loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: rgba(0, 0, 0, 0.7);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+        }
+        
+        .spinner {
+            width: 50px;
+            height: 50px;
+            border: 5px solid #FF69B4;
+            border-left-color: transparent;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body class="min-h-screen">
+    <!-- Loading overlay -->
+    <div id="loadingOverlay" class="loading-overlay">
+        <div class="spinner mb-4"></div>
+        <p class="text-tropi-white text-lg">Connecting to TropiTunes...</p>
+    </div>
+
+    <!-- Film grain overlay -->
+    <div class="film-grain"></div>
+    
+    <!-- Pink grid background -->
+    <div class="pink-grid fixed inset-0 z-0 opacity-20"></div>
+
+    <!-- Toast Notification (shared between both views) -->
+    <div id="toast" class="toast-notification">
+        <p id="toastMessage">Notification message</p>
+    </div>
+
+    <!-- Customer Interface -->
+    <div id="customerInterface" class="relative min-h-screen flex flex-col items-center p-4 z-10">
+        <!-- Home Screen -->
+        <div id="homeScreen" class="flex flex-col items-center justify-center w-full">
+            <!-- Logo & Title -->
+            <div class="animate-float text-center mb-8 mt-12">
+                <h1 class="text-6xl font-bold text-tropi-pink glow-text tracking-wider mb-2">TropiTunes</h1>
+                <p class="text-tropi-white text-2xl">Karaoke Paradise</p>
+            </div>
+
+            <!-- Decorative Elements -->
+            <div class="relative w-full max-w-md mb-12 flex justify-center">
+                <div id="vinylRecord" class="vinyl-record animate-spin-slow">
+                    <div class="vinyl-label">TROPI</div>
+                </div>
+            </div>
+
+            <!-- Start Button -->
+            <button id="startButton" class="gradient-border bg-tropi-black text-tropi-white py-4 px-10 rounded-sm text-xl transform transition-transform duration-200 hover:scale-105 focus:outline-none shadow-lg hover:shadow-tropi-pink/30">
+                Start Singing
+            </button>
+        </div>
+
+        <!-- Queue Registration Form -->
+        <div id="queueForm" class="hidden w-full max-w-lg">
+            <div class="gradient-border tropi-panel p-6 rounded-sm">
+                <h2 class="text-3xl font-bold text-tropi-pink glow-text mb-8 text-center">Join the Queue</h2>
+                
+                <form id="registrationForm" class="space-y-5">
+                    <div class="space-y-2">
+                        <label for="name" class="block text-tropi-white text-lg">Your Name</label>
+                        <input type="text" id="name" required class="w-full bg-tropi-black/70 border-2 border-tropi-pink rounded-sm p-3 text-tropi-white text-base focus:outline-none focus:ring-2 focus:ring-tropi-hotpink">
+                    </div>
+                    
+                    <div class="space-y-2">
+                        <label for="song" class="block text-tropi-white text-lg">Song Choice</label>
+                        <input type="text" id="song" required class="w-full bg-tropi-black/70 border-2 border-tropi-pink rounded-sm p-3 text-tropi-white text-base focus:outline-none focus:ring-2 focus:ring-tropi-hotpink">
+                    </div>
+                    
+                    <div class="pt-6 flex justify-between">
+                        <button type="button" id="backButton" class="bg-tropi-black text-tropi-white px-6 py-3 rounded-sm border-2 border-tropi-pink transition duration-200 hover:border-tropi-hotpink">
+                            Back
+                        </button>
+                        <button type="submit" class="bg-tropi-pink text-tropi-white px-8 py-3 rounded-sm transform transition-transform duration-200 hover:scale-105 shadow-lg">
+                            Add to Queue
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Queue Display -->
+        <div id="queueDisplay" class="hidden w-full max-w-2xl mt-8">
+            <div class="gradient-border tropi-panel p-6 rounded-sm">
+                <div class="flex justify-between items-center mb-6">
+                    <h2 class="text-3xl font-bold text-tropi-pink glow-text">Current Queue</h2>
+                    <p id="currentTime" class="text-tropi-white text-xl"></p>
+                </div>
+                
+                <div id="queueEntries" class="space-y-2 max-h-96 overflow-y-auto p-2 rounded-sm">
+                    <!-- Queue entries will be added here by JavaScript -->
+                </div>
+                
+                <div class="mt-6">
+                    <button id="addMoreButton" class="w-full bg-tropi-black text-tropi-white border-2 border-tropi-pink rounded-sm py-3 transition duration-200 hover:border-tropi-hotpink">
+                        Add Another Song
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Success Notification -->
+        <div id="notification" class="fixed top-0 left-0 right-0 transform -translate-y-full transition-transform duration-500 ease-out z-50">
+            <div class="bg-tropi-pink text-tropi-white text-center p-4 rounded-b-sm mx-auto max-w-md shadow-lg">
+                <p id="notificationText">Added to queue!</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Employee Interface -->
+    <div id="employeeInterface" class="hidden relative min-h-screen z-10">
+        <!-- Return to customer view button -->
+        <button id="backToCustomerView" class="back-to-customer-view bg-tropi-pink text-white px-4 py-2 rounded-sm shadow-lg">
+            Return to Customer View
+        </button>
+
+        <div class="w-full max-w-5xl mx-auto p-4">
+            <!-- Header -->
+            <div class="flex justify-between items-center py-4">
+                <div>
+                    <h1 class="text-4xl font-bold text-tropi-pink glow-text tracking-wider">TropiTunes</h1>
+                    <p class="text-tropi-white text-lg">Staff Portal</p>
+                </div>
+                <div>
+                    <p id="staffCurrentTime" class="text-tropi-white text-xl"></p>
+                </div>
+            </div>
+
+            <!-- Controls & Stats -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                <div class="gradient-border tropi-panel p-4 rounded-sm">
+                    <h3 class="text-xl text-tropi-pink mb-2">Current Song</h3>
+                    <div id="currentSongDisplay" class="text-tropi-white">
+                        <p class="text-sm text-tropi-white/60">No active song</p>
+                    </div>
+                    <div id="currentSongControls" class="mt-4 flex space-x-2 hidden">
+                        <button id="completeSongButton" class="bg-tropi-success text-white px-4 py-2 rounded-sm flex-1 transition-transform hover:scale-105">
+                            Complete
+                        </button>
+                        <button id="skipSongButton" class="bg-tropi-danger text-white px-4 py-2 rounded-sm flex-1 transition-transform hover:scale-105">
+                            Skip
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="gradient-border tropi-panel p-4 rounded-sm">
+                    <h3 class="text-xl text-tropi-pink mb-2">Up Next</h3>
+                    <div id="upNextDisplay" class="text-tropi-white">
+                        <p class="text-sm text-tropi-white/60">No upcoming songs</p>
+                    </div>
+                    <div id="callNextButton" class="mt-4 hidden">
+                        <button class="bg-tropi-pink text-white w-full px-4 py-2 rounded-sm transition-transform hover:scale-105">
+                            Call Next Singer
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="gradient-border tropi-panel p-4 rounded-sm">
+                    <h3 class="text-xl text-tropi-pink mb-2">Stats</h3>
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <p class="text-tropi-white/60">In Queue</p>
+                            <p id="queueCount" class="text-2xl text-tropi-white">0</p>
+                        </div>
+                        <div>
+                            <p class="text-tropi-white/60">Completed</p>
+                            <p id="completedCount" class="text-2xl text-tropi-white">0</p>
+                        </div>
+                        <div>
+                            <p class="text-tropi-white/60">Waiting</p>
+                            <p id="waitingCount" class="text-2xl text-tropi-white">0</p>
+                        </div>
+                        <div>
+                            <p class="text-tropi-white/60">Late</p>
+                            <p id="lateCount" class="text-2xl text-tropi-white">0</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Queue Management -->
+            <div class="gradient-border tropi-panel p-4 rounded-sm">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-2xl font-bold text-tropi-pink">Queue Management</h2>
+                    <div class="flex space-x-2">
+                        <select id="queueFilter" class="bg-tropi-black border border-tropi-pink text-tropi-white px-3 py-2 rounded-sm">
+                            <option value="all">All</option>
+                            <option value="active">Active</option>
+                            <option value="waiting">Waiting</option>
+                            <option value="late">Late</option>
+                            <option value="completed">Completed</option>
+                        </select>
+                        <button id="refreshButton" class="bg-tropi-black text-tropi-white px-3 py-2 rounded-sm border border-tropi-pink hover:bg-tropi-pink/20">
+                            Refresh
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="overflow-x-auto">
+                    <table class="w-full border-collapse">
+                        <thead>
+                            <tr class="text-left border-b border-tropi-pink/30">
+                                <th class="py-3 px-4 text-tropi-pink">Status</th>
+                                <th class="py-3 px-4 text-tropi-pink">Time</th>
+                                <th class="py-3 px-4 text-tropi-pink">Name</th>
+                                <th class="py-3 px-4 text-tropi-pink">Song</th>
+                                <th class="py-3 px-4 text-tropi-pink">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="queueTableBody">
+                            <!-- Queue items will be added here -->
+                            <tr>
+                                <td colspan="5" class="py-8 text-center text-tropi-white/60">
+                                    Loading queue...
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Add Song Form -->
+            <div class="gradient-border tropi-panel p-4 rounded-sm mt-6">
+                <h3 class="text-xl text-tropi-pink mb-4">Add New Song to Queue</h3>
+                <form id="addSongForm" class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                        <label for="newSingerName" class="block text-tropi-white mb-1">Singer Name</label>
+                        <input type="text" id="newSingerName" required class="w-full bg-tropi-black/70 border-2 border-tropi-pink rounded-sm p-2 text-tropi-white text-base focus:outline-none focus:ring-2 focus:ring-tropi-hotpink">
+                    </div>
+                    <div>
+                        <label for="newSongTitle" class="block text-tropi-white mb-1">Song Title</label>
+                        <input type="text" id="newSongTitle" required class="w-full bg-tropi-black/70 border-2 border-tropi-pink rounded-sm p-2 text-tropi-white text-base focus:outline-none focus:ring-2 focus:ring-tropi-hotpink">
+                    </div>
+                    <div class="flex items-end">
+                        <button type="submit" class="bg-tropi-pink text-tropi-white px-4 py-2 rounded-sm h-10 w-full transition-transform hover:scale-105">
+                            Add to Queue
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Initialize Firebase with your config
+        const firebaseConfig = {
+            apiKey: "AIzaSyDkx6EDDR8WKZF0JaLOFIbEbRZB5bFgNnc",
+            authDomain: "tropitunes-karaoke.firebaseapp.com",
+            databaseURL: "https://tropitunes-karaoke-default-rtdb.firebaseio.com",
+            projectId: "tropitunes-karaoke",
+            storageBucket: "tropitunes-karaoke.appspot.com",
+            messagingSenderId: "146657256713",
+            appId: "1:146657256713:web:7cb71e97fa3acab9b2a23e"
+        };
+        
+        // Initialize Firebase
+        firebase.initializeApp(firebaseConfig);
+        const database = firebase.database();
+        
+        // Constants
+        const SONG_DURATION = 5; // minutes per song
+        const LATE_THRESHOLD = 7; // minutes before a singer is considered late
+        const INACTIVITY_TIMEOUT = 5 * 60 * 1000; // 5 minutes
+        const START_TIME = new Date();
+        START_TIME.setHours(8, 15, 0, 0); // 8:15 AM
+        const AUTO_REFRESH_INTERVAL = 30000; // 30 seconds
+        
+        // State variables
+        let queue = [];
+        let currentSong = null;
+        let autoRefreshTimer;
+        let inactivityTimer;
+        let showingForm = false;
+        let recordTapCount = 0;
+        let recordTapTimer;
+        let deviceId = null;
+        let isInitialized = false;
+        
+        // SHARED DOM ELEMENTS
+        const loadingOverlay = document.getElementById('loadingOverlay');
+        const toast = document.getElementById('toast');
+        const toastMessage = document.getElementById('toastMessage');
+        
+        // CUSTOMER INTERFACE DOM Elements
+        const customerInterface = document.getElementById('customerInterface');
+        const homeScreen = document.getElementById('homeScreen');
+        const queueForm = document.getElementById('queueForm');
+        const queueDisplay = document.getElementById('queueDisplay');
+        const startButton = document.getElementById('startButton');
+        const registrationForm = document.getElementById('registrationForm');
+        const backButton = document.getElementById('backButton');
+        const addMoreButton = document.getElementById('addMoreButton');
+        const notification = document.getElementById('notification');
+        const queueEntries = document.getElementById('queueEntries');
+        const currentTimeDisplay = document.getElementById('currentTime');
+        const vinylRecord = document.getElementById('vinylRecord');
+        
+        // EMPLOYEE INTERFACE DOM Elements
+        const employeeInterface = document.getElementById('employeeInterface');
+        const backToCustomerView = document.getElementById('backToCustomerView');
+        const staffCurrentTimeDisplay = document.getElementById('staffCurrentTime');
+        const queueTableBody = document.getElementById('queueTableBody');
+        const queueFilter = document.getElementById('queueFilter');
+        const refreshButton = document.getElementById('refreshButton');
+        const addSongForm = document.getElementById('addSongForm');
+        const currentSongDisplay = document.getElementById('currentSongDisplay');
+        const currentSongControls = document.getElementById('currentSongControls');
+        const completeSongButton = document.getElementById('completeSongButton');
+        const skipSongButton = document.getElementById('skipSongButton');
+        const upNextDisplay = document.getElementById('upNextDisplay');
+        const callNextButton = document.getElementById('callNextButton');
+        const queueCountDisplay = document.getElementById('queueCount');
+        const completedCountDisplay = document.getElementById('completedCount');
+        const waitingCountDisplay = document.getElementById('waitingCount');
+        const lateCountDisplay = document.getElementById('lateCount');
+        
+        // Generate or retrieve a unique device ID
+        function initializeDeviceId() {
+            let id = localStorage.getItem('tropiDeviceId');
+            if (!id) {
+                id = 'device_' + Date.now().toString(36) + Math.random().toString(36).substr(2);
+                localStorage.setItem('tropiDeviceId', id);
+            }
+            deviceId = id;
+            return id;
+        }
+        
+        // Check for dark mode
+        if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+            document.documentElement.classList.add('dark');
+        }
+        window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', event => {
+            if (event.matches) {
+                document.documentElement.classList.add('dark');
+            } else {
+                document.documentElement.classList.remove('dark');
+            }
+        });
+
+        // SHARED FUNCTIONS
+
+        // Create sparkle effect
+        function createSparkle(x, y) {
+            const sparkle = document.createElement('div');
+            sparkle.classList.add('sparkle');
+            
+            const size = Math.random() * 10 + 5;
+            sparkle.style.width = `${size}px`;
+            sparkle.style.height = `${size}px`;
+            
+            // Position with some randomness
+            sparkle.style.left = `${x - size/2 + (Math.random() * 40 - 20)}px`;
+            sparkle.style.top = `${y - size/2 + (Math.random() * 40 - 20)}px`;
+            
+            // Pink and white colors for sparkles
+            const colors = [
+                'rgba(255, 105, 180, 0.8)', // pink
+                'rgba(255, 20, 147, 0.8)',  // hot pink
+                'rgba(255, 255, 255, 0.8)', // white
+                'rgba(255, 182, 193, 0.8)'  // light pink
+            ];
+            sparkle.style.backgroundColor = colors[Math.floor(Math.random() * colors.length)];
+            
+            // Add to body
+            document.body.appendChild(sparkle);
+            
+            // Animate
+            setTimeout(() => {
+                sparkle.style.transition = 'all 0.1s ease-out';
+                sparkle.style.opacity = Math.random() * 0.6 + 0.4;
+                sparkle.style.transform = `scale(${Math.random() * 0.5 + 0.5})`;
+                
+                setTimeout(() => {
+                    sparkle.style.transition = 'all 0.5s ease-in';
+                    sparkle.style.opacity = '0';
+                    sparkle.style.transform = `translateY(${Math.random() * -50 - 20}px) translateX(${Math.random() * 40 - 20}px) scale(0)`;
+                    
+                    setTimeout(() => {
+                        sparkle.remove();
+                    }, 500);
+                }, 100);
+            }, 0);
+        }
+        
+        // Add sparkle burst at specific location
+        function createSparkleBurst(x, y, count) {
+            for (let i = 0; i < count; i++) {
+                setTimeout(() => {
+                    createSparkle(
+                        x + (Math.random() * 100 - 50),
+                        y + (Math.random() * 100 - 50)
+                    );
+                }, i * 30);
+            }
+        }
+
+        // Show toast notification
+        function showToast(message) {
+            toastMessage.textContent = message;
+            toast.classList.add('show');
+            
+            setTimeout(() => {
+                toast.classList.remove('show');
+            }, 3000);
+        }
+        
+        // Update current time
+        function updateCurrentTime() {
+            const now = new Date();
+            const timeStr = formatTime(now);
+            currentTimeDisplay.textContent = `Current time: ${timeStr}`;
+            staffCurrentTimeDisplay.textContent = `Current time: ${timeStr}`;
+        }
+        
+        // Format time for display
+        function formatTime(date) {
+            return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        }
+        
+        // Calculate estimated time for a queue position
+        function calculateEstimatedTime(position) {
+            const now = new Date();
+            const songStartTime = new Date(START_TIME);
+            
+            // Add time for songs ahead in queue
+            songStartTime.setMinutes(songStartTime.getMinutes() + (position * SONG_DURATION));
+            
+            // If the calculated time is before now, use now as base
+            if (songStartTime < now) {
+                const currentSongPosition = Math.floor((now - START_TIME) / (SONG_DURATION * 60 * 1000));
+                songStartTime.setTime(START_TIME.getTime() + (currentSongPosition + position + 1) * SONG_DURATION * 60 * 1000);
+            }
+            
+            return songStartTime;
+        }
+        
+        // Add sparkle effect on mouse move
+        document.addEventListener('mousemove', (e) => {
+            if (Math.random() > 0.9) {
+                createSparkle(e.clientX, e.clientY);
+            }
+        });
+
+        // Add sparkle effect on touch move
+        document.addEventListener('touchmove', (e) => {
+            if (Math.random() > 0.7) {
+                createSparkle(e.touches[0].clientX, e.touches[0].clientY);
+            }
+        });
+        
+        // Helper function to capitalize first letter
+        function capitalizeFirstLetter(string) {
+            return string.charAt(0).toUpperCase() + string.slice(1);
+        }
+        
+        // Generate a unique ID
+        function generateId() {
+            return Date.now().toString(36) + Math.random().toString(36).substr(2);
+        }
+        
+        // FIREBASE DATA FUNCTIONS
+        
+        // Initialize Firebase and set up real-time listeners
+        function initializeFirebase() {
+            // Get a reference to the queue in Firebase
+            const queueRef = database.ref('queue');
+            
+            // Listen for changes to the queue
+            queueRef.on('value', (snapshot) => {
+                const data = snapshot.val() || {};
+                queue = Object.values(data);
+                
+                // Sort queue by timestamp 
+                queue.sort((a, b) => {
+                    const aTime = new Date(a.timestamp || 0);
+                    const bTime = new Date(b.timestamp || 0);
+                    return aTime - bTime;
+                });
+                
+                // Hide loading overlay once data is loaded
+                if (!isInitialized) {
+                    loadingOverlay.style.display = 'none';
+                    isInitialized = true;
+                }
+                
+                // Update UI based on current view
+                if (employeeInterface.classList.contains('hidden')) {
+                    updateQueueDisplay();
+                } else {
+                    loadEmployeeQueueData();
+                }
+            });
+            
+            // Listen for changes to the current song
+            database.ref('currentSong').on('value', (snapshot) => {
+                currentSong = snapshot.val();
+                
+                // Update UI if in employee view
+                if (!employeeInterface.classList.contains('hidden')) {
+                    updateCurrentSong();
+                    updateUpNext();
+                }
+            });
+            
+            // Handle connection state
+            const connectedRef = database.ref('.info/connected');
+            connectedRef.on('value', (snap) => {
+                if (snap.val() === true) {
+                    // We're connected
+                    showToast('Connected to TropiTunes');
+                } else {
+                    // We're disconnected
+                    showToast('Disconnected from TropiTunes. Trying to reconnect...');
+                }
+            });
+        }
+        
+        // Save queue to Firebase
+        function saveQueue() {
+            const queueRef = database.ref('queue');
+            
+            // Clear existing queue
+            queueRef.remove().then(() => {
+                // Add all items with their IDs as keys
+                queue.forEach(item => {
+                    queueRef.child(item.id).set(item);
+                });
+            }).catch(error => {
+                console.error("Error saving queue: ", error);
+                showToast('Error saving queue data');
+            });
+        }
+        
+        // Save current song to Firebase
+        function saveCurrentSong() {
+            database.ref('currentSong').set(currentSong || null);
+        }
+        
+        // CUSTOMER INTERFACE FUNCTIONS
+        
+        // Reset inactivity timer
+        function resetInactivityTimer() {
+            clearTimeout(inactivityTimer);
+            inactivityTimer = setTimeout(() => {
+                // Only return to home screen if we're in customer view
+                if (customerInterface.classList.contains('hidden')) return;
+                showHomeScreen();
+            }, INACTIVITY_TIMEOUT);
+        }
+        
+        // Show home screen
+        function showHomeScreen() {
+            homeScreen.classList.remove('hidden');
+            queueForm.classList.add('hidden');
+            queueDisplay.classList.add('hidden');
+            showingForm = false;
+        }
+        
+        // Show queue form
+        function showQueueForm() {
+            homeScreen.classList.add('hidden');
+            queueForm.classList.remove('hidden');
+            queueDisplay.classList.add('hidden');
+            showingForm = true;
+            resetInactivityTimer();
+        }
+        
+        // Show queue display
+        function showQueueDisplay() {
+            homeScreen.classList.add('hidden');
+            queueForm.classList.add('hidden');
+            queueDisplay.classList.remove('hidden');
+            showingForm = false;
+            updateQueueDisplay();
+            resetInactivityTimer();
+        }
+        
+        // Update the customer queue display
+        function updateQueueDisplay() {
+            // Find user's entry by device ID
+            const yoursQuery = deviceId ? queue.filter(entry => entry.deviceId === deviceId) : [];
+            const yourEntry = yoursQuery.length > 0 ? yoursQuery[yoursQuery.length - 1] : null;
+            const yourPosition = yourEntry ? queue.findIndex(entry => entry.id === yourEntry.id) : -1;
+            
+            queueEntries.innerHTML = '';
+            
+            if (queue.length === 0) {
+                queueEntries.innerHTML = `<div class="text-tropi-white text-center py-4">No one in the queue yet! Be the first to sing!</div>`;
+            } else {
+                // Show "People ahead of you" section when the user is in queue
+                if (yourPosition > 0) {
+                    const peopleAheadHeader = document.createElement('div');
+                    peopleAheadHeader.classList.add('text-center', 'py-3', 'mb-4', 'bg-tropi-pink/20', 'rounded-sm');
+                    peopleAheadHeader.innerHTML = `<p class="text-tropi-white text-lg">People Ahead of You</p>`;
+                    queueEntries.appendChild(peopleAheadHeader);
+                    
+                    // Add people ahead of you
+                    let aheadCount = 0;
+                    for (let i = 0; i < yourPosition; i++) {
+                        const aheadEntry = queue[i];
+                        if (aheadEntry.completed) continue; // Skip completed entries
+                        
+                        aheadCount++;
+                        const estimatedTime = calculateEstimatedTime(i);
+                        const estimatedTimeStr = formatTime(estimatedTime);
+                        
+                        const aheadElement = document.createElement('div');
+                        aheadElement.classList.add('queue-entry', 'p-4', 'rounded-sm', 'flex', 'justify-between', 'items-center');
+                        
+                        aheadElement.innerHTML = `
+                            <div>
+                                <span class="text-tropi-pink">${aheadEntry.name}</span>
+                                <span class="text-tropi-white opacity-70"> — ${aheadEntry.song}</span>
+                            </div>
+                            <div class="text-tropi-lightpink">${estimatedTimeStr}</div>
+                        `;
+                        
+                        queueEntries.appendChild(aheadElement);
+                    }
+                    
+                    if (aheadCount === 0) {
+                        queueEntries.innerHTML += `<div class="text-tropi-white text-center py-4">You're next up!</div>`;
+                    }
+                    
+                    // Add a divider
+                    const divider = document.createElement('div');
+                    divider.classList.add('h-px', 'bg-tropi-pink/30', 'my-4');
+                    queueEntries.appendChild(divider);
+                }
+                
+                // Add full queue listing (excluding completed entries)
+                const fullQueueHeader = document.createElement('div');
+                fullQueueHeader.classList.add('text-center', 'py-3', 'mb-4', 'bg-tropi-pink/20', 'rounded-sm');
+                fullQueueHeader.innerHTML = `<p class="text-tropi-white text-lg">Complete Queue</p>`;
+                queueEntries.appendChild(fullQueueHeader);
+                
+                // Add all active queue entries
+                let visibleEntryCount = 0;
+                queue.forEach((entry, index) => {
+                    if (entry.completed) return; // Skip completed entries for customer view
+                    
+                    visibleEntryCount++;
+                    const estimatedTime = calculateEstimatedTime(index);
+                    const estimatedTimeStr = formatTime(estimatedTime);
+                    
+                    const entryElement = document.createElement('div');
+                    entryElement.classList.add('queue-entry', 'p-4', 'rounded-sm', 'flex', 'flex-col', 'sm:flex-row', 'sm:items-center', 'justify-between', 'gap-3');
+                    
+                    const isYourEntry = yourEntry && entry.id === yourEntry.id;
+                    
+                    if (isYourEntry) {
+                        entryElement.classList.add('border-l-4', 'border-tropi-hotpink', 'pl-3');
+                    }
+                    
+                    entryElement.innerHTML = `
+                        <div class="flex-grow">
+                            <div class="font-bold text-tropi-white${isYourEntry ? ' text-lg' : ''}">${entry.name} ${isYourEntry ? ' (You)' : ''}</div>
+                            <div class="text-tropi-lightpink">${entry.song}</div>
+                        </div>
+                        <div class="text-right flex flex-col items-end">
+                            <div class="text-tropi-pink font-bold">#${visibleEntryCount} in line</div>
+                            <div class="text-tropi-white">Est. time: ${estimatedTimeStr}</div>
+                        </div>
+                    `;
+                    
+                    queueEntries.appendChild(entryElement);
+                });
+                
+                if (visibleEntryCount === 0) {
+                    queueEntries.innerHTML += `<div class="text-tropi-white text-center py-4">All songs have been completed! Add a new song to join the queue.</div>`;
+                }
+            }
+            
+            // Update current time display
+            updateCurrentTime();
+        }
+        
+        // Show notification
+        function showNotification(message) {
+            notification.querySelector('#notificationText').textContent = message;
+            notification.style.transform = 'translateY(0)';
+            
+            setTimeout(() => {
+                notification.style.transform = 'translateY(-100%)';
+            }, 3000);
+        }
+        
+        // EMPLOYEE INTERFACE FUNCTIONS
+        
+        // Show staff interface
+        function showStaffInterface() {
+            customerInterface.classList.add('hidden');
+            employeeInterface.classList.remove('hidden');
+            
+            loadEmployeeQueueData();
+            updateCurrentTime();
+            
+            // Set up auto-refresh
+            clearInterval(autoRefreshTimer);
+            autoRefreshTimer = setInterval(() => {
+                updateCurrentTime();
+                checkForLatePerformers();
+            }, AUTO_REFRESH_INTERVAL);
+            
+            // Create sparkle burst to indicate successful switch
+            createSparkleBurst(window.innerWidth / 2, window.innerHeight / 2, 30);
+        }
+        
+        // Show customer interface
+        function showCustomerInterface() {
+            employeeInterface.classList.add('hidden');
+            customerInterface.classList.remove('hidden');
+            
+            clearInterval(autoRefreshTimer);
+            updateQueueDisplay();
+            resetInactivityTimer();
+            
+            // Create sparkle burst to indicate successful switch
+            createSparkleBurst(window.innerWidth / 2, window.innerHeight / 2, 30);
+        }
+        
+        // Load and process queue data for the employee view
+        function loadEmployeeQueueData() {
+            try {
+                // Process queue items to add status and timing information
+                queue = processQueueData(queue);
+                
+                updateQueueTable();
+                updateStats();
+                updateCurrentSong();
+                updateUpNext();
+                checkForLatePerformers();
+            } catch (e) {
+                console.log('Error loading queue data:', e);
+                showToast('Error loading queue data');
+            }
+        }
+        
+        // Process queue data to add status and timing
+        function processQueueData(rawQueue) {
+            const now = new Date();
+            
+            return rawQueue.map((item, index) => {
+                // Calculate estimated time
+                const estimatedTime = calculateEstimatedTime(index);
+                
+                // Determine status
+                let status = 'waiting';
+                
+                if (item.completed) {
+                    status = 'completed';
+                } else if (currentSong && currentSong.id === item.id) {
+                    status = 'active';
+                } else if (!item.completed && estimatedTime < now && now - estimatedTime > LATE_THRESHOLD * 60 * 1000) {
+                    status = 'late';
+                }
+                
+                // Ensure item has an ID for tracking
+                if (!item.id) {
+                    item.id = generateId();
+                }
+                
+                return {
+                    ...item,
+                    estimatedTime,
+                    status,
+                    index
+                };
+            });
+        }
+        
+        // Update the queue table in employee view
+        function updateQueueTable() {
+            const filterValue = queueFilter.value;
+            queueTableBody.innerHTML = '';
+            
+            if (queue.length === 0) {
+                const emptyRow = document.createElement('tr');
+                emptyRow.innerHTML = `
+                    <td colspan="5" class="py-8 text-center text-tropi-white/60">
+                        No songs in the queue
+                    </td>
+                `;
+                queueTableBody.appendChild(emptyRow);
+                return;
+            }
+            
+            const filteredQueue = filterValue === 'all' 
+                ? queue 
+                : queue.filter(item => item.status === filterValue);
+            
+            if (filteredQueue.length === 0) {
+                const emptyRow = document.createElement('tr');
+                emptyRow.innerHTML = `
+                    <td colspan="5" class="py-8 text-center text-tropi-white/60">
+                        No ${filterValue} songs found
+                    </td>
+                `;
+                queueTableBody.appendChild(emptyRow);
+                return;
+            }
+            
+            filteredQueue.forEach((item) => {
+                const row = document.createElement('tr');
+                row.classList.add('queue-item', `status-${item.status}`);
+                if (item.status === 'active') row.classList.add('active');
+                if (item.status === 'late') row.classList.add('late');
+                if (item.status === 'completed') row.classList.add('completed');
+                
+                const timeDisplay = formatTime(item.estimatedTime);
+                
+                row.innerHTML = `
+                    <td class="py-3 px-4">
+                        <span class="status-indicator status-${item.status}"></span>
+                        ${capitalizeFirstLetter(item.status)}
+                    </td>
+                    <td class="py-3 px-4">${timeDisplay}</td>
+                    <td class="py-3 px-4">${item.name}</td>
+                    <td class="py-3 px-4">${item.song}</td>
+                    <td class="py-3 px-4">
+                        <div class="flex space-x-2">
+                            ${item.status !== 'completed' ? `
+                                <button 
+                                    data-id="${item.id}" 
+                                    class="action-complete bg-tropi-success text-white px-2 py-1 rounded-sm text-sm">
+                                    Complete
+                                </button>
+                                <button 
+                                    data-id="${item.id}" 
+                                    class="action-skip bg-tropi-danger text-white px-2 py-1 rounded-sm text-sm">
+                                    Skip
+                                </button>
+                            ` : `
+                                <button 
+                                    data-id="${item.id}" 
+                                    class="action-reopen bg-tropi-black text-white px-2 py-1 rounded-sm text-sm border border-tropi-pink">
+                                    Reopen
+                                </button>
+                            `}
+                            <button 
+                                data-id="${item.id}" 
+                                class="action-remove bg-tropi-darkgray text-white px-2 py-1 rounded-sm text-sm">
+                                Remove
+                            </button>
+                        </div>
+                    </td>
+                `;
+                
+                queueTableBody.appendChild(row);
+            });
+            
+            // Add event listeners for action buttons
+            document.querySelectorAll('.action-complete').forEach(btn => {
+                btn.addEventListener('click', () => completeSong(btn.dataset.id));
+            });
+            
+            document.querySelectorAll('.action-skip').forEach(btn => {
+                btn.addEventListener('click', () => skipSong(btn.dataset.id));
+            });
+            
+            document.querySelectorAll('.action-reopen').forEach(btn => {
+                btn.addEventListener('click', () => reopenSong(btn.dataset.id));
+            });
+            
+            document.querySelectorAll('.action-remove').forEach(btn => {
+                btn.addEventListener('click', () => removeSong(btn.dataset.id));
+            });
+        }
+        
+        // Update stats display
+        function updateStats() {
+            const total = queue.length;
+            const completed = queue.filter(item => item.status === 'completed').length;
+            const late = queue.filter(item => item.status === 'late').length;
+            const active = queue.filter(item => item.status === 'active').length;
+            const waiting = total - completed - late - active;
+            
+            queueCountDisplay.textContent = total;
+            completedCountDisplay.textContent = completed;
+            waitingCountDisplay.textContent = waiting;
+            lateCountDisplay.textContent = late;
+        }
+        
+        // Update current song display
+        function updateCurrentSong() {
+            // Find the first non-completed song that's not late
+            const activeSong = currentSong || queue.find(item => 
+                item.status === 'active' || 
+                (!item.completed && item.estimatedTime <= new Date() && 
+                 new Date() - item.estimatedTime < LATE_THRESHOLD * 60 * 1000));
+            
+            if (activeSong !== currentSong) {
+                currentSong = activeSong;
+                saveCurrentSong();
+            }
+            
+            if (activeSong) {
+                currentSongDisplay.innerHTML = `
+                    <div class="flex items-center">
+                        <span class="status-indicator status-${activeSong.status}"></span>
+                        <span class="text-xl font-bold">${activeSong.name}</span>
+                    </div>
+                    <p class="mt-1">${activeSong.song}</p>
+                    <p class="text-sm text-tropi-pink mt-1">Scheduled for ${formatTime(activeSong.estimatedTime)}</p>
+                `;
+                currentSongControls.classList.remove('hidden');
+            } else {
+                currentSongDisplay.innerHTML = `<p class="text-sm text-tropi-white/60">No active song</p>`;
+                currentSongControls.classList.add('hidden');
+            }
+        }
+        
+        // Update up next display
+        function updateUpNext() {
+            // Find the next song that's not completed or active
+            const upNextSong = queue.find(item => 
+                item.status !== 'completed' && 
+                item.status !== 'active' && 
+                (!currentSong || item.id !== currentSong.id));
+            
+            if (upNextSong) {
+                upNextDisplay.innerHTML = `
+                    <div class="flex items-center">
+                        <span class="status-indicator status-${upNextSong.status}"></span>
+                        <span class="text-xl font-bold">${upNextSong.name}</span>
+                    </div>
+                    <p class="mt-1">${upNextSong.song}</p>
+                    <p class="text-sm text-tropi-pink mt-1">Scheduled for ${formatTime(upNextSong.estimatedTime)}</p>
+                `;
+                callNextButton.classList.remove('hidden');
+                
+                // Add event listener for call next button
+                const callNextBtn = callNextButton.querySelector('button');
+                callNextBtn.onclick = () => {
+                    if (currentSong) {
+                        completeSong(currentSong.id);
+                    }
+                    
+                    // Set next song as active
+                    activateSong(upNextSong.id);
+                    showToast(`Called ${upNextSong.name} to sing!`);
+                };
+            } else {
+                upNextDisplay.innerHTML = `<p class="text-sm text-tropi-white/60">No upcoming songs</p>`;
+                callNextButton.classList.add('hidden');
+            }
+        }
+        
+        // Check for late performers and handle them
+        function checkForLatePerformers() {
+            const now = new Date();
+            let updated = false;
+            
+            queue.forEach(item => {
+                if (item.status !== 'completed' && 
+                    item.status !== 'active' && 
+                    item.estimatedTime < now && 
+                    now - item.estimatedTime > LATE_THRESHOLD * 60 * 1000) {
+                    
+                    // Mark as late in the local state
+                    item.status = 'late';
+                    updated = true;
+                    
+                    showToast(`${item.name} is now late for their song`);
+                }
+            });
+            
+            if (updated) {
+                saveQueue();
+                updateQueueTable();
+                updateStats();
+            }
+        }
+        
+        // Complete a song
+        function completeSong(id) {
+            const songIndex = queue.findIndex(item => item.id === id);
+            if (songIndex === -1) return;
+            
+            queue[songIndex].completed = true;
+            queue[songIndex].status = 'completed';
+            queue[songIndex].completedAt = new Date().toISOString();
+            
+            if (currentSong && currentSong.id === id) {
+                currentSong = null;
+                saveCurrentSong();
+            }
+            
+            showToast(`Marked "${queue[songIndex].song}" as completed`);
+            saveQueue();
+        }
+        
+        // Skip a song (mark as completed but with skipped flag)
+        function skipSong(id) {
+            const songIndex = queue.findIndex(item => item.id === id);
+            if (songIndex === -1) return;
+            
+            queue[songIndex].completed = true;
+            queue[songIndex].skipped = true;
+            queue[songIndex].status = 'completed';
+            queue[songIndex].completedAt = new Date().toISOString();
+            
+            if (currentSong && currentSong.id === id) {
+                currentSong = null;
+                saveCurrentSong();
+            }
+            
+            showToast(`Skipped "${queue[songIndex].song}"`);
+            saveQueue();
+        }
+        
+        // Reopen a completed song
+        function reopenSong(id) {
+            const songIndex = queue.findIndex(item => item.id === id);
+            if (songIndex === -1) return;
+            
+            queue[songIndex].completed = false;
+            queue[songIndex].skipped = false;
+            queue[songIndex].status = 'waiting';
+            delete queue[songIndex].completedAt;
+            
+            showToast(`Reopened "${queue[songIndex].song}"`);
+            saveQueue();
+        }
+        
+        // Remove a song from the queue
+        function removeSong(id) {
+            const songIndex = queue.findIndex(item => item.id === id);
+            if (songIndex === -1) return;
+            
+            const songName = queue[songIndex].song;
+            
+            if (currentSong && currentSong.id === id) {
+                currentSong = null;
+                saveCurrentSong();
+            }
+            
+            queue.splice(songIndex, 1);
+            
+            showToast(`Removed "${songName}" from queue`);
+            saveQueue();
+        }
+        
+        // Activate a song (set as current)
+        function activateSong(id) {
+            const songIndex = queue.findIndex(item => item.id === id);
+            if (songIndex === -1) return;
+            
+            // Deactivate any current active song
+            queue.forEach(item => {
+                if (item.status === 'active' && item.id !== id) {
+                    item.status = 'waiting';
+                }
+            });
+            
+            queue[songIndex].status = 'active';
+            currentSong = queue[songIndex];
+            
+            saveQueue();
+            saveCurrentSong();
+        }
+        
+        // EVENT LISTENERS FOR CUSTOMER INTERFACE
+        startButton.addEventListener('click', (e) => {
+            showQueueForm();
+            createSparkleBurst(e.clientX || window.innerWidth/2, e.clientY || window.innerHeight/2, 15);
+        });
+        
+        backButton.addEventListener('click', () => {
+            if (showingForm) {
+                showHomeScreen();
+            } else {
+                showQueueForm();
+            }
+            resetInactivityTimer();
+        });
+        
+        addMoreButton.addEventListener('click', showQueueForm);
+        
+        registrationForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            
+            const name = document.getElementById('name').value.trim();
+            const song = document.getElementById('song').value.trim();
+            
+            if (name && song) {
+                const newEntry = {
+                    id: generateId(),
+                    name,
+                    song,
+                    timestamp: new Date().toISOString(),
+                    deviceId: deviceId
+                };
+                
+                // Add new entry to queue
+                queue.push(newEntry);
+                saveQueue();
+                
+                registrationForm.reset();
+                showQueueDisplay();
+                
+                const position = queue.filter(item => !item.completed).length;
+                showNotification(`Added to queue! You're #${position} in line.`);
+                
+                // Create sparkle burst
+                const rect = queueEntries.getBoundingClientRect();
+                createSparkleBurst(
+                    rect.left + rect.width/2,
+                    rect.top + rect.height/2,
+                    25
+                );
+            }
+        });
+        
+        // Vinyl record double-tap to access staff portal
+        vinylRecord.addEventListener('click', () => {
+            recordTapCount++;
+            
+            clearTimeout(recordTapTimer);
+            
+            if (recordTapCount === 2) {
+                // Double tap detected!
+                showStaffInterface();
+                recordTapCount = 0;
+            } else {
+                // Wait for potential second tap
+                recordTapTimer = setTimeout(() => {
+                    recordTapCount = 0;
+                }, 500);
+            }
+        });
+        
+        // EVENT LISTENERS FOR EMPLOYEE INTERFACE
+        backToCustomerView.addEventListener('click', () => {
+            showCustomerInterface();
+        });
+        
+        queueFilter.addEventListener('change', () => {
+            updateQueueTable();
+        });
+        
+        refreshButton.addEventListener('click', () => {
+            loadEmployeeQueueData();
+            showToast('Queue refreshed');
+            
+            // Create sparkle burst around refresh button
+            const rect = refreshButton.getBoundingClientRect();
+            for (let i = 0; i < 15; i++) {
+                setTimeout(() => {
+                    createSparkle(
+                        rect.x + rect.width / 2 + (Math.random() * 40 - 20),
+                        rect.y + rect.height / 2 + (Math.random() * 40 - 20)
+                    );
+                }, i * 30);
+            }
+        });
+        
+        addSongForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            
+            const name = document.getElementById('newSingerName').value.trim();
+            const song = document.getElementById('newSongTitle').value.trim();
+            
+            if (name && song) {
+                const newSong = {
+                    id: generateId(),
+                    name,
+                    song,
+                    timestamp: new Date().toISOString(),
+                    deviceId: 'staff_added',
+                    status: 'waiting'
+                };
+                
+                queue.push(newSong);
+                saveQueue();
+                
+                addSongForm.reset();
+                showToast(`Added "${song}" to the queue`);
+                
+                // Create sparkle burst
+                const rect = addSongForm.getBoundingClientRect();
+                for (let i = 0; i < 20; i++) {
+                    setTimeout(() => {
+                        createSparkle(
+                            rect.left + rect.width / 2 + (Math.random() * 100 - 50),
+                            rect.top + rect.height / 2 + (Math.random() * 50 - 25)
+                        );
+                    }, i * 30);
+                }
+            }
+        });
+        
+        completeSongButton.addEventListener('click', () => {
+            if (currentSong) {
+                completeSong(currentSong.id);
+            }
+        });
+        
+        skipSongButton.addEventListener('click', () => {
+            if (currentSong) {
+                skipSong(currentSong.id);
+            }
+        });
+        
+        // Common event listeners 
+        document.addEventListener('click', resetInactivityTimer);
+        document.addEventListener('touchstart', resetInactivityTimer);
+        
+        // Initialize
+        window.addEventListener('load', () => {
+            // Generate/retrieve device ID
+            initializeDeviceId();
+            
+            // Initialize Firebase and set up listeners
+            initializeFirebase();
+            
+            // Initial UI setup
+            updateCurrentTime();
+            resetInactivityTimer();
+            
+            // Add initial sparkles
+            setTimeout(() => {
+                for (let i = 0; i < 30; i++) {
+                    setTimeout(() => {
+                        createSparkle(
+                            Math.random() * window.innerWidth,
+                            Math.random() * window.innerHeight
+                        );
+                    }, i * 50);
+                }
+            }, 2000);
+        });
+    </script>
+</body>
+</html>
